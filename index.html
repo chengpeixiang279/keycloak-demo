@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Keycloak 登录集成 Demo</title>
+    <script src="https://cdn.jsdelivr.net/npm/keycloak-js@26.0.0/dist/keycloak.js"></script>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --danger: #dc2626;
+            --bg: #f5f6f8;
+            --card: #ffffff;
+            --text: #1f2937;
+            --muted: #6b7280;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+        .card {
+            background: var(--card);
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            padding: 32px;
+            width: 100%;
+            max-width: 440px;
+        }
+        h1 { font-size: 20px; margin: 0 0 8px; }
+        .subtitle { color: var(--muted); font-size: 14px; margin: 0 0 24px; line-height: 1.6; }
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .btn-primary { background: var(--primary); color: #fff; }
+        .btn-outline { background: #fff; color: var(--primary); border: 1px solid var(--primary); }
+        .btn-danger { background: #fff; color: var(--danger); border: 1px solid var(--danger); }
+        .btn + .btn { margin-top: 10px; }
+        .row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; font-size: 14px; }
+        .row .label { color: var(--muted); }
+        .token { font-family: monospace; font-size: 11px; word-break: break-all; background: #f3f4f6; padding: 8px; border-radius: 6px; margin-top: 12px; color: var(--muted); max-height: 120px; overflow: auto; }
+        .loading { text-align: center; color: var(--muted); padding: 40px 0; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <!-- 加载中 -->
+        <div id="loading" class="loading">正在初始化 Keycloak...</div>
+
+        <!-- 未登录 -->
+        <div id="login-view" hidden>
+            <h1>Keycloak 登录集成 Demo</h1>
+            <p class="subtitle">演示前端单页应用如何接入 Keycloak 统一身份认证（OIDC / SSO）</p>
+            <button id="login-btn" class="btn btn-primary">使用 Keycloak 登录</button>
+        </div>
+
+        <!-- 已登录 -->
+        <div id="profile-view" hidden>
+            <h1>登录成功</h1>
+            <p class="subtitle">以下信息来自 Keycloak 返回的 ID Token</p>
+            <div class="row"><span class="label">用户名</span><span id="username"></span></div>
+            <div class="row"><span class="label">邮箱</span><span id="email"></span></div>
+            <div class="row"><span class="label">姓名</span><span id="fullname"></span></div>
+            <button id="refresh-btn" class="btn btn-outline">刷新 Token</button>
+            <button id="logout-btn" class="btn btn-danger">退出登录</button>
+            <div class="token" id="token"></div>
+        </div>
+    </div>
+
+    <script>
+        // ===== Keycloak 配置：按你的 Keycloak 服务端修改 =====
+        const keycloak = new Keycloak({
+            url: 'http://localhost:8080',   // Keycloak 服务地址
+            realm: 'demo',                   // Realm 名称
+            clientId: 'demo-client'          // Client ID
+        });
+
+        const loadingView = document.getElementById('loading');
+        const loginView = document.getElementById('login-view');
+        const profileView = document.getElementById('profile-view');
+
+        function showProfile() {
+            const token = keycloak.tokenParsed || {};
+            document.getElementById('username').textContent = token.preferred_username || '-';
+            document.getElementById('email').textContent = token.email || '-';
+            document.getElementById('fullname').textContent = token.name || '-';
+            document.getElementById('token').textContent = keycloak.token || '';
+            loginView.hidden = true;
+            profileView.hidden = false;
+        }
+
+        // ===== 初始化：检查是否已通过 SSO 登录（不强制跳转） =====
+        keycloak.init({ onLoad: 'check-sso', checkLoginIframe: false })
+            .then(function (authenticated) {
+                loadingView.hidden = true;
+                if (authenticated) {
+                    showProfile();
+                } else {
+                    loginView.hidden = false;
+                }
+            })
+            .catch(function (err) {
+                loadingView.textContent = '初始化失败：' + err;
+            });
+
+        // ===== 事件 =====
+        document.getElementById('login-btn').addEventListener('click', function () {
+            keycloak.login();
+        });
+
+        document.getElementById('logout-btn').addEventListener('click', function () {
+            keycloak.logout();
+        });
+
+        document.getElementById('refresh-btn').addEventListener('click', function () {
+            keycloak.updateToken(30).then(function (refreshed) {
+                showProfile();
+                alert(refreshed ? 'Token 已刷新' : 'Token 仍有效');
+            }).catch(function () {
+                alert('刷新失败，请重新登录');
+                keycloak.login();
+            });
+        });
+    </script>
+</body>
+</html>
